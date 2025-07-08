@@ -1,0 +1,293 @@
+---
+title: "01_R-complex-systems"
+author: "Sglatt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packs}
+if (!require("ggplot2")) {
+  install.packages("ggplot2")
+  require("ggplot2")
+}
+if (!require("gridExtra")) {
+  install.packages("gridExtra")
+  require("gridExtra")
+}
+if (!require("plotly")) {
+  install.packages("plotly")
+  require("plotly")
+}
+if (!require("(zoo)")) {
+  install.packages("(zoo)")
+  require("(zoo)")
+}
+if (!require("deSolve")) {
+  install.packages("deSolve")
+  require("deSolve")
+}
+```
+
+### Nonlinearity: Logistic Map
+```{r logistic-map}
+r <- 3.7
+n <- 200
+x <- numeric(n)
+x[1] <- 0.2
+for (i in 2:n) {
+  x[i] <- r * x[i - 1] * (1 - x[i - 1])
+}
+df <- data.frame(Time = 1:n, Value = x)
+ggplot(df, aes(Time, Value)) +
+  geom_line(color = "darkgreen") +
+  labs(title = "Logistic Map: Nonlinear Dynamics") +
+  theme_minimal()
+df
+```
+
+### Sensitivity to Initial Conditions
+```{r sensitivity}
+x1 <- numeric(n)
+x2 <- numeric(n)
+x1[1] <- 0.2
+x2[1] <- 0.2001
+for (i in 2:n) {
+  x1[i] <- r * x1[i - 1] * (1 - x1[i - 1])
+  x2[i] <- r * x2[i - 1] * (1 - x2[i - 1])
+}
+df <- data.frame(
+  Time = rep(1:n, 2),
+  Value = c(x1, x2),
+  Trajectory = factor(rep(c("x1", "x2"), each = n))
+)
+ggplot(df, aes(Time, Value, color = Trajectory)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Sensitivity to Initial Conditions")
+```
+
+### Multistability
+```{r multistability}
+n <- 300
+noise <- 0.05
+x <- numeric(n)
+x[1] <- 0
+for (i in 2:n) {
+  grad <- x[i - 1]^3 - x[i - 1]
+  x[i] <- x[i - 1] - grad * 0.1 + rnorm(1, 0, noise)
+}
+df <- data.frame(Time = 1:n, Value = x)
+ggplot(df, aes(Time, Value)) +
+  geom_line(color = "purple") +
+  labs(title = "Multistability with Noise") +
+  theme_minimal()
+```
+
+### Critical Transitions
+```{r critical-transition}
+n <- 300
+drift <- 0.01
+noise <- 0.05
+x <- numeric(n)
+param <- numeric(n)
+x[1] <- 0
+for (i in 2:n) {
+  param[i] <- param[i - 1] + drift
+  dx <- param[i] + x[i - 1] - x[i - 1]^3 + rnorm(1, 0, noise)
+  x[i] <- x[i - 1] + dx * 0.05
+}
+df <- data.frame(Time = 1:n, State = x, Param = param)
+ggplot(df, aes(Time, State)) +
+  geom_line(color = "orange") +
+  labs(title = "Critical Transition Toward Tipping Point") +
+  theme_minimal()
+```
+
+### Lorenz Attractor
+```{r lorenz-attractor}
+sigma <- 10
+rho <- 28
+beta <- 8 / 3
+dt <- 0.01
+n <- 5000
+x <- y <- z <- numeric(n)
+x[1] <- y[1] <- z[1] <- 1
+for (i in 2:n) {
+  dx <- sigma * (y[i - 1] - x[i - 1])
+  dy <- x[i - 1] * (rho - z[i - 1]) - y[i - 1]
+  dz <- x[i - 1] * y[i - 1] - beta * z[i - 1]
+  x[i] <- x[i - 1] + dx * dt
+  y[i] <- y[i - 1] + dy * dt
+  z[i] <- z[i - 1] + dz * dt
+}
+df <- data.frame(x = x, y = y, z = z)
+plot_ly(df, x = ~x, y = ~y, z = ~z, type = "scatter3d", mode = "lines", line = list(color = "blue"))
+```
+
+### Hysteresis
+```{r hysteresis}
+steps <- 200
+param <- seq(-3, 3, length.out = steps)
+back <- rev(param)
+forward <- numeric(steps)
+backward <- numeric(steps)
+forward[1] <- -2
+backward[1] <- 2
+for (i in 2:steps) {
+  forward[i] <- forward[i - 1] + 0.1 * (param[i] + forward[i - 1] - forward[i - 1]^3)
+  backward[i] <- backward[i - 1] + 0.1 * (back[i] + backward[i - 1] - backward[i - 1]^3)
+}
+df <- data.frame(Parameter = c(param, back), State = c(forward, backward), Direction = rep(c("Forward", "Backward"), each = steps))
+ggplot(df, aes(Parameter, State, color = Direction)) +
+  geom_line() +
+  labs(title = "Hysteresis") +
+  theme_minimal()
+```
+
+### Critical Slowing Down
+```{r csd}
+n <- 500
+drift <- 0.005
+noise <- 0.03
+window <- 30
+x <- numeric(n)
+x[1] <- 0
+for (t in 2:n) {
+  x[t] <- x[t - 1] + drift + rnorm(1, 0, noise) - 0.01 * x[t - 1]
+}
+var_rolling <- rollapply(x, width = window, FUN = var, fill = NA, align = "right")
+acf_rolling <- rollapply(x, width = window, FUN = function(x) acf(x, plot = FALSE)$acf[2], fill = NA, align = "right")
+df <- data.frame(Time = 1:n, State = x, Variance = var_rolling, Autocorrelation = acf_rolling)
+p1 <- ggplot(df, aes(Time, State)) +
+  geom_line() +
+  labs(title = "State") +
+  theme_minimal()
+p2 <- ggplot(df, aes(Time, Variance)) +
+  geom_line() +
+  labs(title = "Rolling Variance") +
+  theme_minimal()
+p3 <- ggplot(df, aes(Time, Autocorrelation)) +
+  geom_line() +
+  labs(title = "Rolling Autocorrelation") +
+  theme_minimal()
+grid.arrange(p1, p2, p3, ncol = 1)
+```
+
+### Fractals and Scaling: Cantor Set
+```{r cantor-set}
+cantor <- function(x, y, length, n) {
+  if (n == 0) {
+    segments(x, y, x + length, y)
+  } else {
+    cantor(x, y, length / 3, n - 1)
+    cantor(x + 2 * length / 3, y, length / 3, n - 1)
+  }
+}
+plot(0, 0,
+  type = "n", xlim = c(0, 1), ylim = c(-4 * 0.1, 0.1),
+  xlab = "", ylab = "", axes = FALSE, main = "Cantor Set"
+)
+for (i in 0:3) {
+  cantor(0, -i * 0.1, 1, i)
+}
+```
+
+### Kuramoto Model
+```{r kuramoto}
+kuramoto <- function(n = 20, K = 1.5, steps = 200, dt = 0.1) {
+  set.seed(123)
+  omega <- runif(n, 0.8, 1.2)
+  theta <- runif(n, 0, 2 * pi)
+  theta_mat <- matrix(NA, nrow = steps, ncol = n)
+  theta_mat[1, ] <- theta
+  for (t in 2:steps) {
+    dtheta <- omega + (K / n) * rowSums(sin(outer(theta, theta, "-")))
+    theta <- theta + dtheta * dt
+    theta_mat[t, ] <- theta
+  }
+  df <- data.frame(
+    Time = rep(1:steps, each = n),
+    Oscillator = rep(1:n, steps),
+    Phase = as.vector(theta_mat)
+  )
+  ggplot(df, aes(x = Time, y = Phase, group = Oscillator, color = factor(Oscillator))) +
+    geom_line(alpha = 0.6, linewidth = 1, show.legend = FALSE) +
+    labs(title = "Kuramoto Model: Phase Synchronization", x = "Time", y = "Phase") +
+    theme_minimal()
+}
+kuramoto()
+```
+
+### Conway's Game of Life (snapshot)
+```{r game-of-life}
+gol_evolve <- function(grid) {
+  size <- nrow(grid)
+  pad <- function(mat) mat[c(size, 1:size, 1), c(size, 1:size, 1)]
+  g_pad <- pad(grid)
+  nbrs <- matrix(0, nrow = size, ncol = size)
+  for (i in -1:1) {
+    for (j in -1:1) {
+      if (!(i == 0 && j == 0)) {
+        nbrs <- nbrs + g_pad[(2 + i):(size + 1 + i), (2 + j):(size + 1 + j)]
+      }
+    }
+  }
+  new_grid <- (nbrs == 3) | (grid & nbrs == 2)
+  matrix(as.integer(new_grid), nrow = size)
+}
+size <- 20
+grid <- matrix(sample(c(0, 1), size^2, replace = TRUE, prob = c(0.7, 0.3)), nrow = size)
+grid <- gol_evolve(grid)
+image(t(apply(grid, 2, rev)), col = c("white", "black"), axes = FALSE, main = "Game of Life Snapshot")
+```
+
+### Brownian Motion
+```{r brownian-motion}
+steps <- 500
+delta_t <- 0.01
+sigma <- 1
+increments <- rnorm(steps, mean = 0, sd = sigma * sqrt(delta_t))
+B_t <- cumsum(increments)
+times <- seq(delta_t, steps * delta_t, by = delta_t)
+var_vals <- sapply(1:steps, function(i) var(B_t[1:i]))
+theoretical_var <- sigma^2 * times
+plot(times, B_t, type = "l", col = "blue", ylab = "B(t)", xlab = "Time", main = "Brownian Motion")
+abline(h = 0, col = "grey")
+```
+
+### SDE vs ODE Logistic Growth
+```{r ode-sde}
+r <- 1
+K <- 10
+sigma <- 0.5
+x0 <- 1
+time_end <- 20
+dt <- 0.1
+times <- seq(0, time_end, by = dt)
+logistic_ode <- function(t, state, parameters) {
+  with(as.list(c(state, parameters)), {
+    dx <- r * x * (1 - x / K)
+    list(dx)
+  })
+}
+out <- ode(y = c(x = x0), times = times, func = logistic_ode, parms = c(r = r, K = K))
+ode_df <- as.data.frame(out)
+f <- function(x) r * x * (1 - x / K)
+g <- function(x) sigma * x
+x_sde <- numeric(length(times))
+x_sde[1] <- x0
+for (i in 2:length(times)) {
+  drift <- f(x_sde[i - 1])
+  diffusion <- g(x_sde[i - 1])
+  x_sde[i] <- x_sde[i - 1] + drift * dt + diffusion * sqrt(dt) * rnorm(1)
+  if (x_sde[i] < 0) x_sde[i] <- 0
+}
+sde_df <- data.frame(time = times, x = x_sde)
+plot(ode_df$time, ode_df$x, type = "l", col = "blue", lwd = 2, xlab = "Time", ylab = "x", main = "ODE vs SDE")
+lines(sde_df$time, sde_df$x, col = "red")
+legend("topright", legend = c("ODE", "SDE"), col = c("blue", "red"), lwd = 2)
+```
