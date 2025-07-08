@@ -1,6 +1,8 @@
 # Building a Simple RShiny Application  
 **Modeling Properties of Complex Systems**
 
+[https://c2b0rf-sofie-glatt.shinyapps.io/shiny-complex-systems/](https://c2b0rf-sofie-glatt.shinyapps.io/shiny-complex-systems/)
+
 ***_Currently in Progress!_***
 
 ---
